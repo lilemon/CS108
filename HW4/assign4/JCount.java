@@ -1,8 +1,11 @@
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.Hashtable;
 
 import javax.swing.*;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 public class JCount extends JPanel {
 	
@@ -11,14 +14,22 @@ public class JCount extends JPanel {
 	private JLabel label;
 	private JButton start;
 	private JButton stop;
+	private JSlider speed;
 	private Counter counter;
 	
 	private final static int TWIDTH = 10;
+	private final static int SGAP = 10;
 	private final static int VGAP = 40;
 	private final static int ITR = 10000;
-	private final static int NAP = 100;
+	private final static int MIN = 1;
+	private final static int MAX = 25;
+	private final static int DEFAULT = 10;
+	private final static int BASE = 1000;
+	
+	private int nap;
 
 	public JCount() {
+		nap = DEFAULT;
 		createAndShowGUI();
 	}
 
@@ -52,10 +63,35 @@ public class JCount extends JPanel {
 			}
 		});
 		
+		speed = new JSlider(JSlider.HORIZONTAL, MIN, MAX, DEFAULT);
+		Hashtable<Integer, JLabel> labelTable = 
+	            new Hashtable<Integer, JLabel>();
+		JLabel faster = new JLabel("faster");
+		faster.setAlignmentX(RIGHT_ALIGNMENT);
+		JLabel slower = new JLabel("slower");
+		slower.setAlignmentX(LEFT_ALIGNMENT);
+		labelTable.put(new Integer(MIN), slower);
+		labelTable.put(new Integer(MAX), faster);
+ 		speed.setLabelTable(labelTable);
+ 		speed.setPaintLabels(true);
+ 		speed.addChangeListener(new ChangeListener() {
+			public void stateChanged(ChangeEvent e) {
+				nap = BASE / speed.getValue();
+			}
+		});
+ 		
+ 		textfield.setAlignmentX(LEFT_ALIGNMENT);
+ 		label.setAlignmentX(LEFT_ALIGNMENT);
+ 		start.setAlignmentX(LEFT_ALIGNMENT);
+ 		stop.setAlignmentX(LEFT_ALIGNMENT);
+ 		speed.setAlignmentX(LEFT_ALIGNMENT);
+ 		
 		add(textfield);
 		add(label);
 		add(start);
 		add(stop);
+		add(Box.createRigidArea(new Dimension(0,SGAP)));
+		add(speed);
 		add(Box.createRigidArea(new Dimension(0,VGAP)));
 		
 		setVisible(true);
@@ -74,17 +110,19 @@ public class JCount extends JPanel {
 			try {
 				max = Integer.parseInt(jc.textfield.getText());
 			} catch (Exception ignored) {
+				Thread.currentThread().interrupt();
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
 						jc.label.setText("Please try a valid int");
 					}
 				});
+				
 				return;
 			}
 			for (int i = 0; i < max; i++) {
 				if (i % ITR == 0) {
 					try {
-						Thread.sleep(NAP);
+						Thread.sleep(nap);
 					} catch (InterruptedException ex) {
 						return;
 					}
@@ -100,7 +138,7 @@ public class JCount extends JPanel {
 			}
 			if ((max - 1) % ITR != 0) {
 				try {
-					Thread.sleep(NAP);
+					Thread.sleep(nap);
 				} catch (InterruptedException ignored) {
 				}
 				final String text = max + "";
@@ -129,5 +167,6 @@ public class JCount extends JPanel {
 		frame.add(jc4);
 		frame.pack();
 		frame.setVisible(true);
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);		
 	}
 }

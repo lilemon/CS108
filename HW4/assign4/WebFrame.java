@@ -1,6 +1,8 @@
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -22,6 +24,8 @@ import javax.swing.table.TableModel;
 public class WebFrame extends JFrame {
 
 	private DefaultTableModel model;
+	private JMenuBar menuBar;
+	private JMenu menu;
 	private JTable table;
 	private JButton single;
 	private JButton concurrent;
@@ -54,6 +58,32 @@ public class WebFrame extends JFrame {
 				.synchronizedList(new ArrayList<Pair<String, String>>());
 		fetched = 0;
 		lock = new Object();
+		
+		menuBar = new JMenuBar();
+		menu = new JMenu("Select File");
+	    menu.setMnemonic(KeyEvent.VK_F);
+	    menuBar.add(menu);
+	    final JMenuItem file1 = new JMenuItem("links.txt");
+	    
+	    file1.addActionListener(new ActionListener() {
+	    	public void actionPerformed(ActionEvent e) {
+	    		loadData(file1.getText());
+	    	}
+	    });
+	    
+	    final JMenuItem file2 = new JMenuItem("links2.txt");
+	    file2.addActionListener(new ActionListener() {
+	    	public void actionPerformed(ActionEvent e) {
+	    		loadData(file2.getText());
+	    	}
+	    });
+	    
+	    menu.add(file1);
+	    menu.add(file2);
+
+	    frame.setJMenuBar(menuBar);
+	    frame.setSize(350, 250);
+	    frame.setVisible(true);
 
 		setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
 		model = new DefaultTableModel(new String[] { "url", "status" }, 0);
@@ -76,12 +106,20 @@ public class WebFrame extends JFrame {
 							stop.setEnabled(true);
 							concurrent.setEnabled(false);
 							single.setEnabled(false);
+							menu.setEnabled(false);
 						}
 					});
-					launcher = new Launcher(1);
+					launcher = new Launcher(1, frame);
 					launcher.start();
 				} catch (Exception ignored) {
-
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							stop.setEnabled(false);
+							concurrent.setEnabled(true);
+							single.setEnabled(true);
+							menu.setEnabled(true);
+						}
+					});
 				}
 			}
 		});
@@ -97,13 +135,14 @@ public class WebFrame extends JFrame {
 							stop.setEnabled(true);
 							concurrent.setEnabled(false);
 							single.setEnabled(false);
+							menu.setEnabled(false);
 						}
 					});
 					int num = Integer.parseInt(threads.getText());
 					if (num <= 0) {
 						throw (new Exception("non-positive"));
 					}
-					launcher = new Launcher(num);
+					launcher = new Launcher(num, frame);
 					launcher.start();
 				} catch (Exception ignored) {
 					SwingUtilities.invokeLater(new Runnable() {
@@ -111,6 +150,7 @@ public class WebFrame extends JFrame {
 							stop.setEnabled(false);
 							concurrent.setEnabled(true);
 							single.setEnabled(true);
+							menu.setEnabled(true);
 						}
 					});
 					JOptionPane.showMessageDialog(frame,
@@ -137,7 +177,6 @@ public class WebFrame extends JFrame {
 		progress = new JProgressBar();
 		progress.setAlignmentX(LEFT_ALIGNMENT);
 		progress.setValue(0);
-		progress.setMaximum(data.size());
 
 		stop = new JButton("Stop");
 		stop.setAlignmentX(LEFT_ALIGNMENT);
@@ -150,6 +189,7 @@ public class WebFrame extends JFrame {
 							stop.setEnabled(false);
 							concurrent.setEnabled(true);
 							single.setEnabled(true);
+							menu.setEnabled(true);
 						}
 					});
 					interrupted = true;
@@ -195,11 +235,41 @@ public class WebFrame extends JFrame {
 		} catch (Exception ignored) {
 			System.err.println("File loading error occured");
 		}
+		progress.setMaximum(data.size());
+		progress.setString(0 + "/" + data.size());
+		progress.setStringPainted(true);
+	}
+	
+	public void loadData(String file) {
+		workers = Collections.synchronizedList(new ArrayList<WebWorker>());
+		data = Collections
+				.synchronizedList(new ArrayList<Pair<String, String>>());
+		fetched = 0;
+		try {
+			BufferedReader io = new BufferedReader(new FileReader(file));
+			String line = io.readLine();
+			while (line != null) {
+				data.add(new Pair<String, String>(line, ""));
+				line = io.readLine();
+			}
+			update();
+			io.close();
+		} catch (Exception ignored) {
+			System.err.println("File loading error occured");
+		}
+		progress.setMaximum(data.size());
+		progress.setString(0 + "/" + data.size());
+		progress.setValue(0);
+		running.setText("Running: ");
+		completed.setText("Completed: ");
+		elapsed.setText("Elapsed: ");
 	}
 
 	public void clearTable() {
 		fetched = 0;
 		interrupted = false;
+		progress.setValue(0);
+		progress.setString(0 + "/" + data.size());
 		for (Pair<String, String> pair : data) {
 			pair.setR("");
 		}
@@ -218,10 +288,12 @@ public class WebFrame extends JFrame {
 	}
 
 	public class Launcher extends Thread {
+		WebFrame frame;
 
-		public Launcher(int num) {
+		public Launcher(int num, WebFrame frame) {
 			sema = new Semaphore(num);
 			latch = new CountDownLatch(data.size());
+			this.frame = frame;
 		}
 
 		public void run() {
@@ -241,8 +313,11 @@ public class WebFrame extends JFrame {
 						stop.setEnabled(false);
 						concurrent.setEnabled(true);
 						single.setEnabled(true);
+						menu.setEnabled(true);
 					}
 				});
+				JOptionPane.showMessageDialog(frame, "Done! Happy Valentines' Day!");
+				
 			} catch (InterruptedException ignored) {
 				for (WebWorker worker : workers) {
 					worker.interrupt();
@@ -283,6 +358,12 @@ public class WebFrame extends JFrame {
 					sema.release();
 					return;
 				}
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						data.get(i).setR("Fetching...");
+						update();
+					}
+				});
 				workers.add(this);
 				updateLabels();
 				long start = System.currentTimeMillis();
@@ -324,7 +405,6 @@ public class WebFrame extends JFrame {
 					}
 				});
 				workers.remove(this);
-				updateLabels();
 				sema.release();
 			}
 			// Otherwise control jumps to a catch...
@@ -363,9 +443,9 @@ public class WebFrame extends JFrame {
 						fetched++;
 						progress.setValue(fetched);
 						progress.setString(fetched + "/" + data.size());
-						progress.setStringPainted(true);
 					}
 				}
+				updateLabels();
 				latch.countDown();
 			}
 		};
